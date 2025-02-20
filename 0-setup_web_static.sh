@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
-# Install Nginx if not already installed
+# Script to set up web servers for deployment of web_static
+
+# Update and install Nginx if not installed
 sudo apt-get -y update
 sudo apt-get -y upgrade
 sudo apt-get -y install nginx
 
-# create folders
+# Create required directories
 sudo mkdir -p /data/web_static/releases/test /data/web_static/shared
-#create a fake html file
-echo "This is a test" | sudo tee /data/web_static/releases/test/index.html
-# create symbolic link
-sudo ln -sf /data/web_static/releases/test/ /data/web_static/current
 
-# give ownership
-sudo chown -hR ubuntu:ubuntu /data/
-sudo sed -i '38i\\tlocation /hbnb_static/ {\n\t\talias /data/web_static/current/;\n\t}\n' /etc/nginx/sites-available/default
-sudo service nginx start
+# Create a fake HTML file for testing
+echo "Hello, this is a test HTML file." | sudo tee /data/web_static/releases/test/index.html
+
+# Remove any existing symbolic link and create a new one
+sudo rm -rf /data/web_static/current
+sudo ln -s /data/web_static/releases/test/ /data/web_static/current
+
+# Set ownership to the ubuntu user and group
+sudo chown -R ubuntu:ubuntu /data/
+
+# Update Nginx configuration to serve content from /data/web_static/current/
+sudo sed -i '/server_name _;/a \\n\tlocation /hbnb_static/ {\n\t\talias /data/web_static/current/;\n\t}' /etc/nginx/sites-available/default
+
+# Restart Nginx to apply changes
+sudo service nginx restart
+
