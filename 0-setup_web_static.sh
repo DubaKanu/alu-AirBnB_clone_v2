@@ -1,27 +1,92 @@
 #!/usr/bin/env bash
-# Script to set up web servers for deployment of web_static
+# Sets up web servers for web_static deployment (macOS compatible)
 
-# Update and install Nginx if not installed
-sudo apt-get -y update
-sudo apt-get -y upgrade
-sudo apt-get -y install nginx
+# Exit on any error
+set -e
+
+# Ensure script is NOT run with sudo
+if [ "$(id -u)" == "0" ]; then
+    echo "Do NOT run this script with sudo!"
+    exit 1
+fi
+
+# Define base directory inside alu-AirBnB_clone_v2
+BASE_DIR="$(pwd)/data/web_static"
+
+# Install Nginx if not installed (using Homebrew)
+if ! command -v nginx &> /dev/null; then
+    echo "Installing Nginx..."
+    brew install nginx
+fi
 
 # Create required directories
-sudo mkdir -p /data/web_static/releases/test /data/web_static/shared
+mkdir -p "$BASE_DIR/releases/test/"
+mkdir -p "$BASE_DIR/shared/"
 
 # Create a fake HTML file for testing
-echo "Hello, this is a test HTML file." | sudo tee /data/web_static/releases/test/index.html
+echo "<html>
+  <head>
+  </head>
+  <body>
+    Holberton School
+  </body>
+</html>" > "$BASE_DIR/releases/test/index.html"
 
-# Remove any existing symbolic link and create a new one
-sudo rm -rf /data/web_static/current
-sudo ln -s /data/web_static/releases/test/ /data/web_static/current
+# Remove existing symbolic link and create a new one
+rm -rf "$BASE_DIR/current"
+ln -s "$BASE_DIR/releases/test/" "$BASE_DIR/current"
 
-# Set ownership to the ubuntu user and group
-sudo chown -R ubuntu:ubuntu /data/
+# Get current macOS user and group
+CURRENT_USER=$(whoami)
+CURRENT_GROUP=$(id -gn)
 
-# Update Nginx configuration to serve content from /data/web_static/current/
-sudo sed -i '/server_name _;/a \\n\tlocation /hbnb_static/ {\n\t\talias /data/web_static/current/;\n\t}' /etc/nginx/sites-available/default
+# Change ownership to the current macOS user and group
+chown -R "$CURRENT_USER:$CURRENT_GROUP" "$(pwd)/data"
 
-# Restart Nginx to apply changes
-sudo service nginx restart
+# Ensure Nginx config exists
+NGINX_CONF="/usr/local/etc/nginx/nginx.conf"
 
+if [ ! -f "$NGINX_CONF" ]; then
+    echo "Creating default Nginx configuration..."
+    echo "worker_processes  1;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       mime.types;
+        default_type  application/octet-stream;
+
+        sendfile        on;
+        keepalive_timeout  65;
+
+        server {
+            listen       8080;
+            server_name  localhost;
+
+            location / {
+                root   html;
+                index  index.html index.htm;
+            }
+        }
+    }" > "$NGINX_CONF"
+fi
+
+# Backup nginx configuration
+cp "$NGINX_CONF" "$NGINX_CONF.backup"
+
+# Add location block if not already in the config
+if ! grep -q "location /hbnb_static" "$NGINX_CONF"; then
+    echo "Updating Nginx configuration..."
+    sed -i '' -e "/http {/a\\
+        location /hbnb_static {\\
+            alias $BASE_DIR/current/;\\
+        }" "$NGINX_CONF"
+fi
+
+# Restart Nginx
+brew services restart nginx
+
+echo "Setup completed successfully!"
+exit 0
